@@ -3,6 +3,7 @@ from re import L
 from pwn import *
 import sys
 from LibcSearcher import *
+from struct import pack
 
 context(os='linux', arch='amd64', log_level='debug')
 
